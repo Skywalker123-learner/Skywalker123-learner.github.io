@@ -1,8 +1,0 @@
-{
-  "name": "Pomodoro Timer",
-  "short_name": "Pomodoro",
-  "description": "A simple focus timer",
-  "start_url": ".",
-  "display": "standalone",
-  "background_color": "#1e2b3c",
-  "theme_color": "#d46b3a",
