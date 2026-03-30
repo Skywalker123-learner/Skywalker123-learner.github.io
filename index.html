@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>🍅 Pomodoro Timer | Focus & Break</title>
+<link rel="manifest" href="manifest.json">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('SW registered', reg))
+      .catch(err => console.error('SW registration failed', err));
+  }
+  </script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: system-ui, 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      background: linear-gradient(145deg, #1e2b3c 0%, #0f1a24 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 1.5rem;
+    }
+
+    /* main card */
+    .timer-card {
+      max-width: 580px;
+      width: 100%;
+      background: rgba(22, 34, 48, 0.75);
+      backdrop-filter: blur(12px);
+      border-radius: 3rem;
+      box-shadow: 0 25px 45px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      padding: 2rem 1.8rem 2.2rem;
+      transition: all 0.2s ease;
+    }
+
+    /* header & mode */
+    .mode-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .badge {
+      display: inline-block;
+      background: #2c3e44;
+      padding: 0.4rem 1.2rem;
+      border-radius: 60px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #b9e6f0;
+      backdrop-filter: blur(4px);
+      box-shadow: inset 0 0 2px rgba(255,255,255,0.2), 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .mode-name {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-top: 0.7rem;
+      color: #f2e8cf;
+      text-shadow: 0 2px 3px rgba(0,0,0,0.2);
+      letter-spacing: -0.3px;
+    }
+
+    /* timer display */
+    .timer-display {
+      background: #0b141c;
+      border-radius: 4rem;
+      padding: 1rem 0.5rem;
+      margin: 1rem 0 1.2rem;
+      box-shadow: inset 0 6px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(255,255,255,0.05);
+    }
+    #timer {
+      font-size: 5.5rem;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', 'Fira Mono', monospace;
+      text-align: center;
+      color: #ffdd99;
+      letter-spacing: 6px;
+      text-shadow: 0 0 6px #ffb34740;
+      word-break: break-word;
+    }
+    @media (max-width: 480px) {
+      #timer { font-size: 3.8rem; letter-spacing: 3px; }
+      .timer-card { padding: 1.5rem; }
+    }
+
+    /* button group */
+    .action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.8rem;
+      margin: 1.8rem 0 1.5rem;
+    }
+    .btn {
+      border: none;
+      background: #2a3b44;
+      padding: 0.75rem 1.4rem;
+      border-radius: 3rem;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      color: #eef4ff;
+      transition: 0.15s linear;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+      flex: 0 1 auto;
+      min-width: 85px;
+      backdrop-filter: blur(2px);
+    }
+    .btn-primary {
+      background: #d46b3a;
+      color: white;
+      box-shadow: 0 4px 10px rgba(212, 107, 58, 0.3);
+    }
+    .btn-primary:hover {
+      background: #c05a2a;
+      transform: scale(0.97);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+    .btn-secondary {
+      background: #2d4f5c;
+    }
+    .btn-secondary:hover {
+      background: #1f3e48;
+      transform: scale(0.97);
+    }
+    .btn-warning {
+      background: #5a3e2b;
+    }
+    .btn-warning:hover {
+      background: #462f1f;
+    }
+    .btn:active {
+      transform: scale(0.95);
+    }
+
+    /* stats + settings row */
+    .stats-section {
+      background: #0f1a1f80;
+      border-radius: 2rem;
+      padding: 1rem 1.2rem;
+      margin-top: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      backdrop-filter: blur(4px);
+    }
+    .pomodoro-count {
+      background: #00000055;
+      border-radius: 2rem;
+      padding: 0.4rem 1rem;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .pomodoro-count span:first-child {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #b9cfdf;
+    }
+    #pomodoroCount {
+      font-size: 1.9rem;
+      font-weight: 800;
+      color: #ffcd94;
+      line-height: 1;
+    }
+    .reset-stats-btn {
+      background: #3c2c2c;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 2rem;
+      color: #f7cfb0;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: 0.1s;
+    }
+    .reset-stats-btn:hover {
+      background: #5a3e3e;
+    }
+
+    /* settings panel */
+    .settings {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      justify-content: space-between;
+      margin-top: 1rem;
+      background: #0b141c60;
+      padding: 1rem 1rem;
+      border-radius: 2rem;
+    }
+    .setting-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: #14232e;
+      padding: 0.4rem 1rem;
+      border-radius: 3rem;
+    }
+    .setting-item label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #cbd5e6;
+    }
+    .setting-item input {
+      width: 70px;
+      background: #071016;
+      border: 1px solid #3f5b68;
+      color: #ffeca2;
+      font-weight: 600;
+      padding: 0.4rem 0.5rem;
+      border-radius: 2rem;
+      text-align: center;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .setting-item input:focus {
+      border-color: #ffb347;
+    }
+    .status-message {
+      text-align: center;
+      font-size: 0.75rem;
+      margin-top: 1rem;
+      color: #bdd4e2;
+      background: #07131c70;
+      display: inline-block;
+      width: auto;
+      margin-left: auto;
+      margin-right: auto;
+      padding: 0.3rem 1rem;
+      border-radius: 40px;
+      backdrop-filter: blur(4px);
+    }
+    hr {
+      border-color: #2f4957;
+      margin: 0.8rem 0;
+    }
+    footer {
+      font-size: 0.7rem;
+      text-align: center;
+      margin-top: 1rem;
+      color: #6c8d9b;
+    }
+    button:disabled {
+      opacity: 0.5;
+      transform: none;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+<div class="timer-card">
+  <div class="mode-header">
+    <div class="badge">🍅 POMODORO</div>
+    <div class="mode-name" id="modeLabel">Work Session</div>
+  </div>
+
+  <div class="timer-display">
+    <div id="timer">25:00</div>
+  </div>
+
+  <div class="action-buttons">
+    <button class="btn btn-primary" id="startBtn">▶ Start</button>
+    <button class="btn btn-secondary" id="pauseBtn">⏸ Pause</button>
+    <button class="btn btn-secondary" id="resetBtn">⟳ Reset</button>
+    <button class="btn btn-warning" id="skipBtn">⏩ Skip</button>
+  </div>
+
+  <div class="stats-section">
+    <div class="pomodoro-count">
+      <span>🍅 completed</span>
+      <span id="pomodoroCount">0</span>
+    </div>
+    <button class="reset-stats-btn" id="resetStatsBtn">⟲ reset stats</button>
+  </div>
+
+  <div class="settings">
+    <div class="setting-item">
+      <label>🎯 Work</label>
+      <input type="number" id="workMinutes" min="1" max="99" value="25" step="1">
+      <span style="color:#a3c4d4;">min</span>
+    </div>
+    <div class="setting-item">
+      <label>☕ Break</label>
+      <input type="number" id="breakMinutes" min="1" max="99" value="5" step="1">
+      <span style="color:#a3c4d4;">min</span>
+    </div>
+  </div>
+  
+  <div class="status-message" id="statusMsg">
+    ✨ Ready to focus
+  </div>
+  <footer>auto‑start next session • skip without counting</footer>
+</div>
+
+<script>
+  // ------------------- DOM elements -------------------
+  const timerEl = document.getElementById('timer');
+  const modeLabel = document.getElementById('modeLabel');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const skipBtn = document.getElementById('skipBtn');
+  const workMinutesInput = document.getElementById('workMinutes');
+  const breakMinutesInput = document.getElementById('breakMinutes');
+  const pomodoroCountSpan = document.getElementById('pomodoroCount');
+  const resetStatsBtn = document.getElementById('resetStatsBtn');
+  const statusMsgDiv = document.getElementById('statusMsg');
+
+  // ------------------- State variables -------------------
+  let workDurationSec = 25 * 60;      // seconds
+  let breakDurationSec = 5 * 60;
+  let currentMode = 'work';           // 'work' or 'break'
+  let timeLeftSec = workDurationSec;   // remaining seconds
+  let timerInterval = null;
+  let isRunning = false;
+  let pomodoroCount = 0;              // number of completed work sessions
+
+  // Helper: format mm:ss
+  function formatTime(seconds) {
+    if (seconds < 0) seconds = 0;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // Update UI: timer display, mode label, button states & input enable/disable based on isRunning
+  function refreshUI() {
+    timerEl.textContent = formatTime(timeLeftSec);
+    if (currentMode === 'work') {
+      modeLabel.textContent = '🍅 Work Session';
+      modeLabel.style.color = '#ffdd99';
+    } else {
+      modeLabel.textContent = '🌿 Break Time';
+      modeLabel.style.color = '#b8f2e2';
+    }
+    pomodoroCountSpan.textContent = pomodoroCount;
+
+    // enable/disable duration inputs only when timer is NOT running (safe to edit)
+    const inputsDisabled = isRunning;
+    workMinutesInput.disabled = inputsDisabled;
+    breakMinutesInput.disabled = inputsDisabled;
+  }
+
+  // show temporary status message
+  function setStatusMessage(msg, isError = false) {
+    statusMsgDiv.textContent = msg;
+    statusMsgDiv.style.opacity = '1';
+    if (isError) {
+      statusMsgDiv.style.background = '#862e2e70';
+    } else {
+      statusMsgDiv.style.background = '#07131c70';
+    }
+    // auto fade after 2.5s (but keep last message)
+    setTimeout(() => {
+      if (statusMsgDiv.textContent === msg) {
+        // only reset if it's still the same message
+        if (!isRunning && currentMode === 'work') statusMsgDiv.textContent = '✨ Ready to focus';
+        else if (!isRunning && currentMode === 'break') statusMsgDiv.textContent = '☕ Take a break';
+        else if (isRunning) statusMsgDiv.textContent = currentMode === 'work' ? '🍅 Focus in progress...' : '🌿 Relaxing...';
+        else statusMsgDiv.textContent = '🍅 Pomodoro ready';
+        statusMsgDiv.style.background = '#07131c70';
+      }
+    }, 2200);
+  }
+
+  // Update durations from input fields and sync with timer (only if not running)
+  function syncDurationsFromInputs() {
+    let newWorkMin = parseInt(workMinutesInput.value, 10);
+    let newBreakMin = parseInt(breakMinutesInput.value, 10);
+    if (isNaN(newWorkMin) || newWorkMin < 1) newWorkMin = 1;
+    if (isNaN(newBreakMin) || newBreakMin < 1) newBreakMin = 1;
+    workMinutesInput.value = newWorkMin;
+    breakMinutesInput.value = newBreakMin;
+    
+    const newWorkSec = newWorkMin * 60;
+    const newBreakSec = newBreakMin * 60;
+    let durationChanged = (workDurationSec !== newWorkSec || breakDurationSec !== newBreakSec);
+    
+    workDurationSec = newWorkSec;
+    breakDurationSec = newBreakSec;
+    
+    // If timer is not running, adjust current timer display according to current mode
+    if (!isRunning && durationChanged) {
+      if (currentMode === 'work') {
+        // if current work session, reset time left to new work duration (only if not running)
+        timeLeftSec = workDurationSec;
+      } else {
+        timeLeftSec = breakDurationSec;
+      }
+      refreshUI();
+    } else if (!isRunning) {
+      // just to be safe: refresh display
+      refreshUI();
+    }
+  }
+
+  // completely stop timer, clear interval, set isRunning false, enable inputs
+  function stopTimer() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    isRunning = false;
+    refreshUI();   // re-enables inputs
+  }
+
+  // core timer tick (called every second)
+  function tick() {
+    if (timeLeftSec <= 0) {
+      // timer reached zero, finish session
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      isRunning = false;
+      handleSessionComplete();
+      return;
+    }
+    timeLeftSec--;
+    refreshUI();
+  }
+
+  // Called when timer hits 0 (session ends naturally)
+  function handleSessionComplete() {
+    // play subtle notification vibe (visual only, but status message)
+    if (currentMode === 'work') {
+      // completed a full work session → increment pomodoro count
+      pomodoroCount++;
+      setStatusMessage(`✅ Work completed! +1 pomodoro. Moving to break.`, false);
+      // switch to break mode
+      currentMode = 'break';
+      timeLeftSec = breakDurationSec;
+      refreshUI();
+      // auto-start break timer
+      startTimerInternal();
+    } 
+    else { // break finished
+      setStatusMessage(`🎉 Break finished! Back to work.`, false);
+      currentMode = 'work';
+      timeLeftSec = workDurationSec;
+      refreshUI();
+      // auto-start work session
+      startTimerInternal();
+    }
+  }
+
+  // internal method to start countdown (ensures no duplicate interval & sets isRunning)
+  function startTimerInternal() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    if (timeLeftSec <= 0) {
+      // edge case: if zero, treat as immediate completion
+      if (currentMode === 'work') {
+        // edge: zero work duration? but min=1 min so >0
+        timeLeftSec = workDurationSec;
+      } else {
+        timeLeftSec = breakDurationSec;
+      }
+      refreshUI();
+    }
+    isRunning = true;
+    refreshUI();   // disables inputs
+    timerInterval = setInterval(() => {
+      tick();
+    }, 1000);
+  }
+
+  // Public start (called from start button)
+  function startTimer() {
+    if (isRunning) return;
+    if (timeLeftSec <= 0) {
+      // safety: if somehow time left 0, reset to proper duration based on mode
+      if (currentMode === 'work') timeLeftSec = workDurationSec;
+      else timeLeftSec = breakDurationSec;
+      refreshUI();
+    }
+    startTimerInternal();
+    setStatusMessage(currentMode === 'work' ? '🍅 Focus started!' : '🧘 Break started', false);
+  }
+
+  // Pause action
+  function pauseTimer() {
+    if (!isRunning) return;
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    isRunning = false;
+    refreshUI();   // re-enables inputs, keeps timeLeft
+    setStatusMessage('⏸ Paused. Click start to continue.', false);
+  }
+
+  // Reset timer: stops, set mode to work, resets time to current work duration, keep pomodoro count unchanged
+  function resetTimer() {
+    // stop any running timer
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    isRunning = false;
+    // force reset to work mode
+    currentMode = 'work';
+    timeLeftSec = workDurationSec;
+    refreshUI();   // updates mode label & timer display, enables inputs
+    setStatusMessage('⟳ Timer reset to work session', false);
+  }
+
+  // Skip current session: move to next mode without counting completed pomodoro (unless work was finished naturally, skip just moves)
+  function skipSession() {
+    // Stop timer completely
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    const wasRunning = isRunning;
+    isRunning = false;
+    
+    // Toggle mode
+    if (currentMode === 'work') {
+      currentMode = 'break';
+      timeLeftSec = breakDurationSec;
+      setStatusMessage('⏩ Skipped work → break', false);
+    } else {
+      currentMode = 'work';
+      timeLeftSec = workDurationSec;
+      setStatusMessage('⏩ Skipped break → work', false);
+    }
+    refreshUI();  // inputs become enabled because isRunning = false
+    // optional: if timer was running before skip, we just stopped; do NOT auto-start.
+    // (user can manually start)
+  }
+
+  // reset only pomodoro counter (completed work sessions)
+  function resetPomodoroStats() {
+    pomodoroCount = 0;
+    refreshUI();
+    setStatusMessage('🍅 Pomodoro counter reset', false);
+  }
+
+  // handle duration inputs when changed manually (only if timer is NOT running)
+  function onWorkMinutesChange() {
+    if (isRunning) return; // disabled in UI but extra safety
+    let val = parseInt(workMinutesInput.value, 10);
+    if (isNaN(val) || val < 1) val = 1;
+    if (val > 99) val = 99;
+    workMinutesInput.value = val;
+    const newWorkSec = val * 60;
+    workDurationSec = newWorkSec;
+    // if current mode is work & timer not running, update timeLeft
+    if (!isRunning && currentMode === 'work') {
+      timeLeftSec = workDurationSec;
+    } else if (!isRunning && currentMode === 'break') {
+      // if in break mode, leave break timer as is, but keep durations consistent
+      // but we don't change break timer unless break minutes edited separately
+    }
+    refreshUI();
+    setStatusMessage(`Work duration set to ${val} min`, false);
+  }
+
+  function onBreakMinutesChange() {
+    if (isRunning) return;
+    let val = parseInt(breakMinutesInput.value, 10);
+    if (isNaN(val) || val < 1) val = 1;
+    if (val > 99) val = 99;
+    breakMinutesInput.value = val;
+    const newBreakSec = val * 60;
+    breakDurationSec = newBreakSec;
+    if (!isRunning && currentMode === 'break') {
+      timeLeftSec = breakDurationSec;
+    }
+    refreshUI();
+    setStatusMessage(`Break duration set to ${val} min`, false);
+  }
+
+  // sync initial durations from inputs on load & set timeLeftSec
+  function initializeFromInputs() {
+    let initWork = parseInt(workMinutesInput.value, 10);
+    let initBreak = parseInt(breakMinutesInput.value, 10);
+    if (isNaN(initWork) || initWork < 1) initWork = 25;
+    if (isNaN(initBreak) || initBreak < 1) initBreak = 5;
+    workMinutesInput.value = initWork;
+    breakMinutesInput.value = initBreak;
+    workDurationSec = initWork * 60;
+    breakDurationSec = initBreak * 60;
+    currentMode = 'work';
+    timeLeftSec = workDurationSec;
+    pomodoroCount = 0;
+    isRunning = false;
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+    refreshUI();
+  }
+
+  // When skip or reset we ensure inputs become enabled, plus edge case if timer auto-start after session it disables them
+  // also handle before unload cleanup
+  window.addEventListener('beforeunload', () => {
+    if (timerInterval) clearInterval(timerInterval);
+  });
+
+  // Event listeners
+  startBtn.addEventListener('click', startTimer);
+  pauseBtn.addEventListener('click', pauseTimer);
+  resetBtn.addEventListener('click', resetTimer);
+  skipBtn.addEventListener('click', skipSession);
+  resetStatsBtn.addEventListener('click', resetPomodoroStats);
+  workMinutesInput.addEventListener('change', onWorkMinutesChange);
+  breakMinutesInput.addEventListener('change', onBreakMinutesChange);
+  
+  // Additional: if user clicks on input arrows, live update for better UX: also listen to input event
+  workMinutesInput.addEventListener('input', function() {
+    if (isRunning) return;
+    let val = parseInt(this.value, 10);
+    if (isNaN(val)) val = 1;
+    if (val < 1) val = 1;
+    if (val > 99) val = 99;
+    this.value = val;
+    workDurationSec = val * 60;
+    if (!isRunning && currentMode === 'work') {
+      timeLeftSec = workDurationSec;
+      refreshUI();
+    } else if (!isRunning && currentMode === 'break') {
+      // do not override break time if work minutes changed during break mode (keep break untouched)
+      // but we just update durations
+    }
+    refreshUI();
+  });
+  
+  breakMinutesInput.addEventListener('input', function() {
+    if (isRunning) return;
+    let val = parseInt(this.value, 10);
+    if (isNaN(val)) val = 1;
+    if (val < 1) val = 1;
+    if (val > 99) val = 99;
+    this.value = val;
+    breakDurationSec = val * 60;
+    if (!isRunning && currentMode === 'break') {
+      timeLeftSec = breakDurationSec;
+      refreshUI();
+    }
+    refreshUI();
+  });
+
+  // set default status on page load
+  initializeFromInputs();
+  setStatusMessage('🍅 Ready! Press start for 25 min focus', false);
+  
+  // additional: ensure if user manually changes work/break after reset but not running, timer display matches current mode
+  // this is already handled by listeners and refreshUI
+  // also disable start button glitch: if timeLeft zero after weird edge, reset behavior covered.
+  function safetyGuard() {
+    if (!isRunning && timeLeftSec <= 0) {
+      if (currentMode === 'work') timeLeftSec = workDurationSec;
+      else timeLeftSec = breakDurationSec;
+      refreshUI();
+    }
+  }
+  setInterval(safetyGuard, 500); // tiny guard for any weird zero-case
+</script>
+</body>
+</html>
